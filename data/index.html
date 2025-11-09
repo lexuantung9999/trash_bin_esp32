@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ESP32 Motor &amp; Servo Control</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 30px; }
+    button { width: 150px; height: 60px; font-size: 20px; margin: 10px; }
+    #encoder { margin-top: 20px; font-size: 18px; }
+  </style>
+</head>
+<body>
+  <h2>ESP32 Motor &amp; Servo Control</h2>
+
+  <div>
+    <button id="btnLeft">Turn Left</button>
+    <button id="btnRight">Turn Right</button>
+  </div>
+  <div>
+    <button id="btnOpen">Open</button>
+    <button id="btnClose">Close</button>
+  </div>
+
+  <div id="encoder">Encoder Count: 0</div>
+
+  <script>
+    function bindHold(btn, startUrl) {
+      const start = () => fetch(startUrl).catch(() => {});
+      const stop  = () => fetch('/motor/stop').catch(() => {});
+      btn.addEventListener('mousedown', start);
+      btn.addEventListener('mouseup', stop);
+      btn.addEventListener('mouseleave', stop);
+      btn.addEventListener('touchstart', e => { e.preventDefault(); start(); }, { passive: false });
+      btn.addEventListener('touchend',   e => { e.preventDefault(); stop();  }, { passive: false });
+      btn.addEventListener('touchcancel',e => { e.preventDefault(); stop();  }, { passive: false });
+    }
+
+    bindHold(document.getElementById('btnLeft'),  '/motor/left');
+    bindHold(document.getElementById('btnRight'), '/motor/right');
+
+    document.getElementById('btnOpen').onclick  = () => fetch('/servo/open');
+    document.getElementById('btnClose').onclick = () => fetch('/servo/close');
+
+    function updateEncoder() {
+      fetch('/encoder')
+        .then(response => response.text())
+        .then(text => { document.getElementById('encoder').innerText = 'Encoder Count: ' + text; });
+    }
+    setInterval(updateEncoder, 500);
+    updateEncoder();
+  </script>
+</body>
+</html>
