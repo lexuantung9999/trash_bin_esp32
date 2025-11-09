@@ -20,7 +20,7 @@
 #define SENSOR_INACTIVE()  (!SENSOR_ACTIVE())
 
 // --------------- Pulses & bins -------------------
-#define PULSES_PER_REV   23600L            // ~24 036 (x4)
+#define PULSES_PER_REV   23550L            // ~24 036 (x4)
 #define PULSES_PER_BIN   (PULSES_PER_REV/4)
 
 // --------------- Motor speeds (0..255) ----------
@@ -197,7 +197,13 @@ void resetPosition() {
 // --------------- Move to target bin --------------
 void rotateToBin(int targetBin) {
   if (targetBin < 1 || targetBin > 4) return;
-  if (targetBin == currentBin) return;
+  if (targetBin == currentBin) {
+      // perform Dump Cycle
+      delay(2000);
+      servoOpen();
+      delay(3000);
+      servoClose();
+  }
 
   int cwDelta  = (targetBin - currentBin + 4) % 4; // right
   int ccwDelta = (currentBin - targetBin + 4) % 4; // left
