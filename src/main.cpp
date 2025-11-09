@@ -19,6 +19,17 @@
 #define SENSOR_ACTIVE()    (digitalRead(SENSOR_PIN) == LOW)
 #define SENSOR_INACTIVE()  (!SENSOR_ACTIVE())
 
+// ---------------- Wi-Fi settings -----------------
+// Preferred STA network
+#define STA_SSID  "ROBOT"
+#define STA_PASS  "Robotic@123"
+// Desired final static IP: keep gateway subnet, force last octet to 51
+#define DESIRED_LAST_OCTET  51
+
+// Fallback AP (if STA fails)
+#define AP_SSID   "AI_Trash_Bin"
+#define AP_PASS   "sgt@since2022"
+
 // --------------- Pulses & bins -------------------
 #define PULSES_PER_REV   23550L            // ~24 036 (x4)
 #define PULSES_PER_BIN   (PULSES_PER_REV/4)
@@ -29,7 +40,6 @@
 #define DUTY_MEDIUM       100              // trung bình khi gần
 #define DUTY_SLOW          90              // rất chậm khi tới đích
 #define DUTY_HOME_SLOW    100              // reset: quay chậm 1 chiều
-
 // --------------- Decel thresholds ---------------
 #define THRESH_MED       1600              // còn <= ngưỡng -> medium
 #define THRESH_SLOW       500              // còn <= ngưỡng -> slow
@@ -194,15 +204,23 @@ void resetPosition() {
   Serial.println("[HOMING] Done (simple, one-direction). At Bin 1.");
 }
 
+// Chu trình xả rác khi đã ở đúng bin
+static inline void performDumpCycle() {
+  delay(2000);      // ổn định
+  servoOpen();
+  delay(3000);      // mở trong 3s
+  servoClose();
+}
+
 // --------------- Move to target bin --------------
 void rotateToBin(int targetBin) {
   if (targetBin < 1 || targetBin > 4) return;
+
+  // Nếu đang ở đúng bin cần xả: không di chuyển, chỉ mở/đóng
   if (targetBin == currentBin) {
-      // perform Dump Cycle
-      delay(2000);
-      servoOpen();
-      delay(3000);
-      servoClose();
+    previousBin = currentBin;
+    performDumpCycle();
+    return;
   }
 
   int cwDelta  = (targetBin - currentBin + 4) % 4; // right
@@ -240,10 +258,7 @@ void rotateToBin(int targetBin) {
   }
   motorStop();
 
-  delay(2000);
-  servoOpen();
-  delay(3000);
-  servoClose();
+  performDumpCycle();
 
   previousBin = currentBin;
   currentBin  = targetBin;
@@ -282,32 +297,109 @@ void handleState() {
   server.send(200, "application/json", json);
 }
 
+// ---------------- Wi-Fi bootstrap ----------------
+bool startWiFiPreferSTA() {
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect(true, true);
+  delay(200);
+
+  WiFi.begin(STA_SSID, STA_PASS);
+  Serial.printf("Connecting STA to %s ...\n", STA_SSID);
+
+  const unsigned long TOUT1 = 15000; // 15s để thử DHCP
+  unsigned long t0 = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - t0) < TOUT1) {
+    delay(250);
+    Serial.print(".");
+  }
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    IPAddress ip  = WiFi.localIP();
+    IPAddress gw  = WiFi.gatewayIP();
+    IPAddress sn  = WiFi.subnetMask();
+    IPAddress dns = WiFi.dnsIP();
+
+    uint32_t gw_u32  = (uint32_t)gw;
+    uint32_t sn_u32  = (uint32_t)sn;
+    uint32_t dns_u32 = (uint32_t)dns;
+
+    Serial.printf("STA DHCP OK: IP=%s GW=%s SN=%s DNS=%s\n",
+      ip.toString().c_str(), gw.toString().c_str(),
+      sn.toString().c_str(), dns.toString().c_str());
+
+    // Chỉ khi có gateway & subnet hợp lệ mới ép IP tĩnh cùng subnet
+    if (gw_u32 != 0 && sn_u32 != 0) {
+      IPAddress desired(gw[0], gw[1], gw[2], DESIRED_LAST_OCTET);
+
+      bool needReconfig = (ip[0] != desired[0] ||
+                           ip[1] != desired[1] ||
+                           ip[2] != desired[2] ||
+                           ip[3] != desired[3]);
+
+      if (needReconfig) {
+        Serial.printf("Reconfig static IP to %s ...\n", desired.toString().c_str());
+        WiFi.disconnect(true, true);
+        delay(200);
+        if (dns_u32 == 0) dns = gw; // nếu DNS rỗng, dùng GW làm DNS
+        if (!WiFi.config(desired, gw, sn, dns)) {
+          Serial.println("WiFi.config() failed");
+        }
+        WiFi.begin(STA_SSID, STA_PASS);
+
+        const unsigned long TOUT2 = 8000; // 8s cho lần reconnect
+        t0 = millis();
+        while (WiFi.status() != WL_CONNECTED && (millis() - t0) < TOUT2) {
+          delay(250);
+          Serial.print("#");
+        }
+        Serial.println();
+      }
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.printf("STA Ready. IP: %s\n", WiFi.localIP().toString().c_str());
+      return true;
+    }
+  }
+
+  // Fallback AP
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(AP_SSID, AP_PASS);
+  Serial.printf("AP Mode. SSID=%s  PASS=%s  IP=%s\n",
+                AP_SSID, AP_PASS, WiFi.softAPIP().toString().c_str());
+  return false;
+}
+
 // -------------------- setup/loop ------------------
 void setup() {
   Serial.begin(115200);
 
-  if (!LittleFS.begin(false)) Serial.println("Failed to mount LittleFS");
-  else                        Serial.println("LittleFS mounted");
+  // Auto-format if first time / corrupted
+  if (!LittleFS.begin(true)) Serial.println("Failed to mount LittleFS (formatted)");
+  else                       Serial.println("LittleFS mounted");
 
-  WiFi.softAP("AI_Trash_Bin", "sgt@since2022");
-  Serial.print("AP IP: "); Serial.println(WiFi.softAPIP());
+  // Wi-Fi: prefer STA(ROBOT), fallback to AP
+  bool sta = startWiFiPreferSTA();
 
+  // Motor & servo
   motorSetup();
   motorStop();
-
   servo1.attach(SERVO1_PIN);
   servo2.attach(SERVO2_PIN, 500, 2500, LEDC_TIMER_1, LEDC_CHANNEL_3);
   servoClose();
 
+  // Sensor + Encoder
   pinMode(SENSOR_PIN, INPUT_PULLUP); // ACTIVE LOW
-
   pinMode(ENCODER_A, INPUT);
   pinMode(ENCODER_B, INPUT);
   attachInterrupt(digitalPinToInterrupt(ENCODER_A), updateEncoder, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENCODER_B), updateEncoder, CHANGE);
 
-  resetPosition(); // simple one-direction homing
+  // Homing đơn giản (1 chiều chậm)
+  resetPosition();
 
+  // Routes
   server.on("/",            handleRoot);
   server.on("/encoder",     handleEncoder);
   server.on("/motor/left",  handleMotorLeft);
@@ -323,7 +415,11 @@ void setup() {
   server.on("/state",       handleState);
 
   server.begin();
-  Serial.println("HTTP server started");
+  if (sta) {
+    Serial.printf("HTTP server on STA IP: %s:80\n", WiFi.localIP().toString().c_str());
+  } else {
+    Serial.printf("HTTP server on AP IP:  %s:80\n", WiFi.softAPIP().toString().c_str());
+  }
 }
 
 void loop() {
