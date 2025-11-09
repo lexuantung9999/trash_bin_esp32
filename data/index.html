@@ -2,29 +2,67 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ESP32 Motor &amp; Servo Control</title>
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>AI Trash Bin – Control Panel</title>
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin-top: 30px; }
-    button { width: 150px; height: 60px; font-size: 20px; margin: 10px; }
-    #encoder { margin-top: 20px; font-size: 18px; }
+    :root { --gap: 12px; }
+    body { font-family: system-ui, Arial, sans-serif; margin: 0; padding: 24px; text-align: center; }
+    h2 { margin: 0 0 16px; }
+    .row {
+      display: flex;
+      gap: var(--gap);
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    button {
+      min-width: 120px;
+      min-height: 48px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      cursor: pointer;
+      padding: 8px 16px;
+    }
+    #encoder, #bins { margin-top: 20px; font-size: 16px; }
+    .card {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 20px;
+      border: 1px solid #eee;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    }
   </style>
 </head>
 <body>
-  <h2>ESP32 Motor &amp; Servo Control</h2>
-
-  <div>
-    <button id="btnLeft">Turn Left</button>
-    <button id="btnRight">Turn Right</button>
+  <div class="card">
+    <h2>AI Trash Bin Control</h2>
+    <!-- Motor control buttons -->
+    <div class="row">
+      <button id="btnLeft">Turn Left</button>
+      <button id="btnRight">Turn Right</button>
+    </div>
+    <!-- Servo control buttons -->
+    <div class="row">
+      <button id="btnOpen">Open</button>
+      <button id="btnClose">Close</button>
+    </div>
+    <!-- Bin selection buttons -->
+    <div class="row">
+      <button id="btnBin1">Bin 1</button>
+      <button id="btnBin2">Bin 2</button>
+      <button id="btnBin3">Bin 3</button>
+      <button id="btnBin4">Bin 4</button>
+      <button id="btnReset">Reset</button>
+    </div>
+    <div id="encoder">Encoder Count: 0</div>
+    <div id="bins">Current Bin: 1 | Previous Bin: 1</div>
   </div>
-  <div>
-    <button id="btnOpen">Open</button>
-    <button id="btnClose">Close</button>
-  </div>
-
-  <div id="encoder">Encoder Count: 0</div>
 
   <script>
+    // Bind hold for continuous motor control
     function bindHold(btn, startUrl) {
       const start = () => fetch(startUrl).catch(() => {});
       const stop  = () => fetch('/motor/stop').catch(() => {});
@@ -35,20 +73,48 @@
       btn.addEventListener('touchend',   e => { e.preventDefault(); stop();  }, { passive: false });
       btn.addEventListener('touchcancel',e => { e.preventDefault(); stop();  }, { passive: false });
     }
-
-    bindHold(document.getElementById('btnLeft'),  '/motor/left');
-    bindHold(document.getElementById('btnRight'), '/motor/right');
-
-    document.getElementById('btnOpen').onclick  = () => fetch('/servo/open');
-    document.getElementById('btnClose').onclick = () => fetch('/servo/close');
-
-    function updateEncoder() {
-      fetch('/encoder')
-        .then(response => response.text())
-        .then(text => { document.getElementById('encoder').innerText = 'Encoder Count: ' + text; });
+    // Buttons references
+    const btnLeft  = document.getElementById('btnLeft');
+    const btnRight = document.getElementById('btnRight');
+    const btnOpen  = document.getElementById('btnOpen');
+    const btnClose = document.getElementById('btnClose');
+    const btnBin1  = document.getElementById('btnBin1');
+    const btnBin2  = document.getElementById('btnBin2');
+    const btnBin3  = document.getElementById('btnBin3');
+    const btnBin4  = document.getElementById('btnBin4');
+    const btnReset = document.getElementById('btnReset');
+    const encDiv   = document.getElementById('encoder');
+    const binDiv   = document.getElementById('bins');
+    // Bind motor hold controls
+    bindHold(btnLeft,  '/motor/left');
+    bindHold(btnRight, '/motor/right');
+    // Servo control clicks
+    btnOpen.addEventListener('click',  () => fetch('/servo/open').catch(() => {}));
+    btnClose.addEventListener('click', () => fetch('/servo/close').catch(() => {}));
+    // Bin selection clicks
+    btnBin1.addEventListener('click', () => { fetch('/bin1'); updateState(); });
+    btnBin2.addEventListener('click', () => { fetch('/bin2'); updateState(); });
+    btnBin3.addEventListener('click', () => { fetch('/bin3'); updateState(); });
+    btnBin4.addEventListener('click', () => { fetch('/bin4'); updateState(); });
+    // Reset button
+    btnReset.addEventListener('click', () => { fetch('/reset'); updateState(); });
+    // Function to update encoder and bin display
+    async function updateState() {
+      try {
+        // Fetch encoder count
+        const encRes = await fetch('/encoder');
+        const encText = await encRes.text();
+        encDiv.textContent = 'Encoder Count: ' + encText;
+        // Fetch bin state
+        const stateRes = await fetch('/state');
+        const stateJson = await stateRes.json();
+        binDiv.textContent = 'Current Bin: ' + stateJson.current + ' | Previous Bin: ' + stateJson.previous;
+      } catch (_) {
+        // ignore errors
+      }
     }
-    setInterval(updateEncoder, 500);
-    updateEncoder();
+    setInterval(updateState, 500);
+    updateState();
   </script>
 </body>
 </html>
