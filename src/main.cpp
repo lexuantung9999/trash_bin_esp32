@@ -31,18 +31,19 @@
 #define AP_PASS   "sgt@since2022"
 
 // --------------- Pulses & bins -------------------
-#define PULSES_PER_REV   23550L            // ~24 036 (x4)
+#define PULSES_PER_REV   23550L            // thực tế bạn đo
 #define PULSES_PER_BIN   (PULSES_PER_REV/4)
 
 // --------------- Motor speeds (0..255) ----------
-#define DUTY_MANUAL       128              // 50% cho Turn Left/Right
+#define DUTY_MANUAL       128              // 50% cho Turn Left/Right (nút thủ công)
 #define DUTY_FAST         120              // chạy nhanh khi còn xa
 #define DUTY_MEDIUM       100              // trung bình khi gần
-#define DUTY_SLOW          90              // rất chậm khi tới đích
+#define DUTY_SLOW          90              // chậm khi vào đích
 #define DUTY_HOME_SLOW    100              // reset: quay chậm 1 chiều
+
 // --------------- Decel thresholds ---------------
-#define THRESH_MED       1600              // còn <= ngưỡng -> medium
-#define THRESH_SLOW       500              // còn <= ngưỡng -> slow
+#define THRESH_MED       1600              // <= ngưỡng -> medium
+#define THRESH_SLOW       500              // <= ngưỡng -> slow
 
 // --------------- Web server ---------------------
 WebServer server(80);
@@ -54,6 +55,12 @@ volatile int  lastEncoded  = 0;
 // --------------- Bin state ----------------------
 int currentBin  = 1; // 1..4
 int previousBin = 1;
+
+// ---------- Helper cập nhật trạng thái ----------
+inline void setCurrentBin(int newBin, bool updatePrevious = true) {
+  if (updatePrevious) previousBin = currentBin;
+  currentBin = newBin;
+}
 
 // ---------------- Servo driver ------------------
 class ServoLite {
@@ -195,11 +202,8 @@ void resetPosition() {
     motorStop();
   }
 
-  noInterrupts();
-  encoderCount = 0;
-  interrupts();
-  previousBin = currentBin;
-  currentBin  = 1;
+  noInterrupts(); encoderCount = 0; interrupts();
+  setCurrentBin(1, true); // previous = bin cũ, current = 1
 
   Serial.println("[HOMING] Done (simple, one-direction). At Bin 1.");
 }
@@ -216,13 +220,13 @@ static inline void performDumpCycle() {
 void rotateToBin(int targetBin) {
   if (targetBin < 1 || targetBin > 4) return;
 
-  // Nếu đang ở đúng bin cần xả: không di chuyển, chỉ mở/đóng
+  // Nếu đang ở đúng bin cần xả: không di chuyển, không đổi previous/current
   if (targetBin == currentBin) {
-    previousBin = currentBin;
     performDumpCycle();
     return;
   }
 
+  // Tính hướng ngắn nhất
   int cwDelta  = (targetBin - currentBin + 4) % 4; // right
   int ccwDelta = (currentBin - targetBin + 4) % 4; // left
   long pulsesNeeded;
@@ -235,13 +239,16 @@ void rotateToBin(int targetBin) {
     goLeft = true;  // quay trái
   }
 
+  // Reset encoder trước khi di chuyển
   noInterrupts(); encoderCount = 0; interrupts();
 
+  // Bắt đầu ở tốc độ nhanh
   uint8_t duty = DUTY_FAST;
   if (goLeft) motorLeft(duty); else motorRight(duty);
 
   while (true) {
     server.handleClient();
+
     long traveled  = labs(encoderCount);
     if (traveled >= pulsesNeeded) break;
 
@@ -260,8 +267,8 @@ void rotateToBin(int targetBin) {
 
   performDumpCycle();
 
-  previousBin = currentBin;
-  currentBin  = targetBin;
+  // Cập nhật trạng thái: previous = bin cũ, current = target
+  setCurrentBin(targetBin, true);
 }
 
 // ---------------- HTTP handlers ------------------
