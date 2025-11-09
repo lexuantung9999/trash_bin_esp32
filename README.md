@@ -1,6 +1,7 @@
 Code gồm 2 phần chính
 - Code firmware trash bin:
   . define chân :
+  
           #define MOTOR_IN1   26
           #define MOTOR_IN2   27
           #define ENCODER_A   34
@@ -11,6 +12,7 @@ Code gồm 2 phần chính
           
           // Proximity sensor (ACTIVE LOW at home)
           #define SENSOR_PIN  14
+  
   . Điều khiển các động cơ (1 DC encoder và 2 Servo MG996). Có 1 cảm biến tiệm cận làm mốc ở thùng 1
   . Encoder ~23550 xung / vòng (sau tất cả các hộp giảm tốc)
   . Code 1 webserver để điều khiển trashbin thủ công
