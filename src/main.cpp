@@ -24,7 +24,7 @@
 #define STA_SSID  "ROBOT"
 #define STA_PASS  "Robotic@123"
 // Desired final static IP: keep gateway subnet, force last octet to 51
-#define DESIRED_LAST_OCTET  51
+#define DESIRED_LAST_OCTET  100
 
 // Fallback AP (if STA fails)
 #define AP_SSID   "AI_Trash_Bin"
@@ -38,7 +38,7 @@
 #define DUTY_MANUAL       128              // 50% cho Turn Left/Right (nút thủ công)
 #define DUTY_FAST         120              // chạy nhanh khi còn xa
 #define DUTY_MEDIUM       100              // trung bình khi gần
-#define DUTY_SLOW          90              // chậm khi vào đích
+#define DUTY_SLOW         90              // chậm khi vào đích
 #define DUTY_HOME_SLOW    100              // reset: quay chậm 1 chiều
 
 // --------------- Decel thresholds ---------------
