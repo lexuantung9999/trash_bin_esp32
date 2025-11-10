@@ -27,3 +27,5 @@ Code gồm 2 phần chính
   . Dùng 1 camera cắm vào máy ubuntu, máy PC này cần kết nối chung đến wifi ROBOT kia để có thể gửi API điều khiển trashbin qua wifi
   
   . Cắm camera vào máy tính và chạy file test_detect_2.py để chạy phân loại rác
+
+  . Để Máy tính kết nối và điều khiển được ESP32 cần cấu hình IP trong /scripts/test_detect_2.py, tìm HOSTS = ["http://172.28.63.100"] và sửa lại IP cho đúng với IP của ESP32
